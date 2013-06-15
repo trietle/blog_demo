@@ -1,10 +1,14 @@
+set :default_environment, {
+      'PATH' => "/opt/rbenv/versions/2.0.0-p195/bin:$PATH"
+    }
 require "bundler/capistrano"
 
-server "192.168.33.10", :web, :app, :db, primary: true
+server "192.168.33.20", :web, :app, :db, primary: true
 
 set :application, "blog"
 set :user, "deployer"
-set :deploy_to, "/home/#{user}/apps/#{application}"
+set :deploy_dir, "/var/www/nginx-default"
+set :deploy_to, "#{deploy_dir}/#{application}"
 set :deploy_via, :remote_cache
 set :use_sudo, false
 
@@ -18,20 +22,32 @@ ssh_options[:forward_agent] = true
 after "deploy", "deploy:cleanup" # keep only the last 5 releases
 
 namespace :deploy do
-  %w[start stop restart].each do |command|
-    desc "#{command} unicorn server"
+  %w[start restart].each do |command|
+    desc "#{command} passenger server"
     task command, roles: :app, except: {no_release: true} do
-      run "/etc/init.d/unicorn_#{application} #{command}"
+      run "touch #{current_path}/tmp/restart.txt"
     end
   end
 
+  task :stop, :roles => :app do
+    # Do nothing.
+  end
+
+  desc "Grant permissions to deploy dir"
+  task :grant, :roles => :app do
+    #run "sudo usermod -g www-data #{user}"
+    run "sudo chown -R #{user}:www-data #{deploy_dir}"
+    run "sudo chmod -R 775 #{deploy_dir}"
+  end
+
   task :setup_config, roles: :app do
-    sudo "ln -nfs #{current_path}/config/nginx.conf /etc/nginx/sites-enabled/#{application}"
-    sudo "ln -nfs #{current_path}/config/unicorn_init.sh /etc/init.d/unicorn_#{application}"
+    #sudo "ln -nfs #{current_path}/config/nginx.conf /etc/nginx/sites-enabled/#{application}"
+    #sudo "ln -nfs #{current_path}/config/unicorn_init.sh /etc/init.d/unicorn_#{application}"
     run "mkdir -p #{shared_path}/config"
     put File.read("config/database.example.yml"), "#{shared_path}/config/database.yml"
     puts "Now edit the config files in #{shared_path}."
   end
+  before "deploy:setup", "deploy:grant"
   after "deploy:setup", "deploy:setup_config"
 
   task :symlink_config, roles: :app do
@@ -48,4 +64,9 @@ namespace :deploy do
     end
   end
   before "deploy", "deploy:check_revision"
+
+  desc "Execute migrations"
+  task :migrate, :roles => :db do
+    run "bundle exec rake db:migrate"
+  end
 end
