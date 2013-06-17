@@ -1,6 +1,7 @@
+default_run_options[:shell] = '/bin/bash --login'
 set :default_environment, {
-      'PATH' => "/opt/rbenv/versions/2.0.0-p195/bin:$PATH"
-    }
+  'PATH' => "/opt/rbenv/shims/ruby:$HOME/.rbenv/bin:$PATH"
+}
 require "bundler/capistrano"
 
 server "192.168.33.20", :web, :app, :db, primary: true
@@ -35,16 +36,15 @@ namespace :deploy do
 
   desc "Grant permissions to deploy dir"
   task :grant, :roles => :app do
-    #run "sudo usermod -g www-data #{user}"
+    run "sudo usermod -a -G www-data #{user}"
     run "sudo chown -R #{user}:www-data #{deploy_dir}"
-    run "sudo chmod -R 775 #{deploy_dir}"
   end
 
   task :setup_config, roles: :app do
     #sudo "ln -nfs #{current_path}/config/nginx.conf /etc/nginx/sites-enabled/#{application}"
     #sudo "ln -nfs #{current_path}/config/unicorn_init.sh /etc/init.d/unicorn_#{application}"
     run "mkdir -p #{shared_path}/config"
-    put File.read("config/database.example.yml"), "#{shared_path}/config/database.yml"
+    put File.read("config/database.deploy.yml"), "#{shared_path}/config/database.yml"
     puts "Now edit the config files in #{shared_path}."
   end
   before "deploy:setup", "deploy:grant"
@@ -64,9 +64,4 @@ namespace :deploy do
     end
   end
   before "deploy", "deploy:check_revision"
-
-  desc "Execute migrations"
-  task :migrate, :roles => :db do
-    run "bundle exec rake db:migrate"
-  end
 end

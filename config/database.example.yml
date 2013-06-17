@@ -17,4 +17,4 @@ test:
 
 production:
   <<: *login
-  database: blog_production
+  database: db-production
